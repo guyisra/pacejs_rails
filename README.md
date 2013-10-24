@@ -19,7 +19,7 @@ In the stylesheet manifest (application.css) add a theme of your choosing:
 
 for exmaple
 
-    //= pace-theme-big-counter
+    *= pace-theme-big-counter
 
 see themes here: http://github.hubspot.com/pace/docs/welcome/
 
