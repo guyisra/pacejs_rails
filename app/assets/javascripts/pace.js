@@ -1,8 +1,8 @@
-// v 0.4.16
+// v 0.5.1
 // Pace.js
 // https://github.com/HubSpot/pace
 (function() {
-  var AjaxMonitor, Bar, DocumentMonitor, ElementMonitor, ElementTracker, EventLagMonitor, Evented, Events, NoTargetError, RequestIntercept, SOURCE_KEYS, Scaler, SocketRequestTracker, XHRRequestTracker, animation, avgAmplitude, bar, cancelAnimation, cancelAnimationFrame, defaultOptions, extend, extendNative, getFromDOM, getIntercept, handlePushState, ignoreStack, init, now, options, requestAnimationFrame, result, runAnimation, scalers, shouldTrack, source, sources, uniScaler, _WebSocket, _XDomainRequest, _XMLHttpRequest, _i, _intercept, _len, _pushState, _ref, _ref1, _replaceState,
+  var AjaxMonitor, Bar, DocumentMonitor, ElementMonitor, ElementTracker, EventLagMonitor, Evented, Events, NoTargetError, RequestIntercept, SOURCE_KEYS, Scaler, SocketRequestTracker, XHRRequestTracker, animation, avgAmplitude, bar, cancelAnimation, cancelAnimationFrame, defaultOptions, extend, extendNative, getFromDOM, getIntercept, handlePushState, ignoreStack, init, now, options, requestAnimationFrame, result, runAnimation, scalers, shouldIgnoreURL, shouldTrack, source, sources, uniScaler, _WebSocket, _XDomainRequest, _XMLHttpRequest, _i, _intercept, _len, _pushState, _ref, _ref1, _replaceState,
     __slice = [].slice,
     __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
@@ -30,7 +30,8 @@
     },
     ajax: {
       trackMethods: ['GET'],
-      trackWebSockets: false
+      trackWebSockets: true,
+      ignoreURLs: []
     }
   };
 
@@ -246,7 +247,7 @@
         }
         this.el = document.createElement('div');
         this.el.className = "pace pace-active";
-        document.body.className = document.body.className.replace('pace-done', '');
+        document.body.className = document.body.className.replace(/pace-done/g, '');
         document.body.className += ' pace-running';
         this.el.innerHTML = '<div class="pace-progress">\n  <div class="pace-progress-inner"></div>\n</div>\n<div class="pace-activity"></div>';
         if (targetElement.firstChild != null) {
@@ -441,7 +442,11 @@
       if ((_WebSocket != null) && options.ajax.trackWebSockets) {
         window.WebSocket = function(url, protocols) {
           var req;
-          req = new _WebSocket(url, protocols);
+          if (protocols != null) {
+            req = new _WebSocket(url, protocols);
+          } else {
+            req = new _WebSocket(url);
+          }
           if (shouldTrack('socket')) {
             _this.trigger('request', {
               type: 'socket',
@@ -469,9 +474,30 @@
     return _intercept;
   };
 
+  shouldIgnoreURL = function(url) {
+    var pattern, _j, _len1, _ref2;
+    _ref2 = options.ajax.ignoreURLs;
+    for (_j = 0, _len1 = _ref2.length; _j < _len1; _j++) {
+      pattern = _ref2[_j];
+      if (typeof pattern === 'string') {
+        if (url.indexOf(pattern) !== -1) {
+          return true;
+        }
+      } else {
+        if (pattern.test(url)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
   getIntercept().on('request', function(_arg) {
-    var after, args, request, type;
-    type = _arg.type, request = _arg.request;
+    var after, args, request, type, url;
+    type = _arg.type, request = _arg.request, url = _arg.url;
+    if (shouldIgnoreURL(url)) {
+      return;
+    }
     if (!Pace.running && (options.restartOnRequestAfter !== false || shouldTrack(type) === 'force')) {
       args = arguments;
       after = options.restartOnRequestAfter || 0;
@@ -514,8 +540,11 @@
     }
 
     AjaxMonitor.prototype.watch = function(_arg) {
-      var request, tracker, type;
-      type = _arg.type, request = _arg.request;
+      var request, tracker, type, url;
+      type = _arg.type, request = _arg.request, url = _arg.url;
+      if (shouldIgnoreURL(url)) {
+        return;
+      }
       if (type === 'socket') {
         tracker = new SocketRequestTracker(request);
       } else {
@@ -817,11 +846,13 @@
   };
 
   Pace.go = function() {
+    var start;
     Pace.running = true;
     bar.render();
+    start = now();
     cancelAnimation = false;
     return animation = runAnimation(function(frameTime, enqueueNextFrame) {
-      var avg, count, done, element, elements, i, j, remaining, scaler, scalerList, start, sum, _j, _k, _len1, _len2, _ref2;
+      var avg, count, done, element, elements, i, j, remaining, scaler, scalerList, sum, _j, _k, _len1, _len2, _ref2;
       remaining = 100 - bar.progress;
       count = sum = 0;
       done = true;
@@ -842,7 +873,6 @@
       }
       avg = sum / count;
       bar.update(uniScaler.tick(frameTime, avg));
-      start = now();
       if (bar.done() || done || cancelAnimation) {
         bar.update(100);
         Pace.trigger('done');
@@ -850,7 +880,7 @@
           bar.finish();
           Pace.running = false;
           return Pace.trigger('hide');
-        }, Math.max(options.ghostTime, Math.min(options.minTime, now() - start)));
+        }, Math.max(options.ghostTime, Math.max(options.minTime - (now() - start), 0)));
       } else {
         return enqueueNextFrame();
       }
